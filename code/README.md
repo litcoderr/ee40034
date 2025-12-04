@@ -22,9 +22,10 @@ Use `--mixedprec` flag to enable mixed precision training. This is recommended f
 ```
 Softmax (softmax)
 Triplet (triplet)
+Triplet + ArcFace (triplet_arcface)
 ```
 
-For softmax-based losses, `nPerClass` should be 1, and `nClasses` must be specified. For metric-based losses, `nPerClass` should be 2 or more. 
+For softmax-based losses, `nPerClass` should be 1, and `nClasses` must be specified. For metric-based losses, `nPerClass` should be 2 or more. `triplet_arcface` mixes both worlds: keep `nPerClass >= 2` for the triplet pairs and set `nClasses` correctly for the ArcFace classifier. You can balance the terms with `--arcface_weight` and `--triplet_weight` and tune the margin/scale via `--arcface_margin` and `--scale`.
 
 ### Implemented models
 ```
