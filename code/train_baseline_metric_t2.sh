@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+GPU="${GPU:-4}"
+RUN_NAME="${RUN_NAME:-baseline_triplet_arcface_t2}"
+
+# Data paths (override to point at your copies)
+ROOT_PATH="/mnt/hard2/litcoderr/project/ee40034"
+TRAIN_PATH="${TRAIN_PATH:-${ROOT_PATH}/data/train2}"
+TEST_PATH="${TEST_PATH:-${ROOT_PATH}/data/val}"
+TEST_LIST="${TEST_LIST:-${ROOT_PATH}/data/val_pairs.csv}"
+
+# Training hyperparameters for metric fine-tuning
+MODEL="${MODEL:-ResNet18}"
+TRAINFUNC="${TRAINFUNC:-triplet_arcface}"
+BATCH_SIZE="${BATCH_SIZE:-64}"
+N_CLASSES="${N_CLASSES:-2882}" # set correctly when using ArcFace-based losses
+N_PER_CLASS="${N_PER_CLASS:-2}"
+MAX_EPOCH="${MAX_EPOCH:-100}"
+SAVE_ROOT="${SAVE_ROOT:-${SCRIPT_DIR}/exps}"
+#INITIAL_MODEL="${INITIAL_MODEL:-${SCRIPT_DIR}/exps/baseline/epoch0010.model}"
+INITIAL_MODEL="${INITIAL_MODEL:-${SCRIPT_DIR}/exps/baseline_metric_t2/epoch0006.model}"
+
+python "${SCRIPT_DIR}/trainEmbedNet.py" \
+  --gpu "${GPU}" \
+  --model "${MODEL}" \
+  --trainfunc "${TRAINFUNC}" \
+  --batch_size "${BATCH_SIZE}" \
+  --nPerClass "${N_PER_CLASS}" \
+  --nClasses "${N_CLASSES}" \
+  --max_epoch "${MAX_EPOCH}" \
+  --train_path "${TRAIN_PATH}" \
+  --test_path "${TEST_PATH}" \
+  --test_list "${TEST_LIST}" \
+  --save_path "${SAVE_ROOT}/${RUN_NAME}" \
+  --initial_model "${INITIAL_MODEL}" \
+  --wandb_run_name "${RUN_NAME}" \
+  --lr 0.0005 \
+  --arcface_weight 1.0 \
+  --triplet_weight 1.0 \
+  "$@"

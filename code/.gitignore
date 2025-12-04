@@ -1,6 +1,5 @@
 # Other files
 *.model
-*.sh
 *.csv
 data/
 exps/
