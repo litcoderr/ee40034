@@ -58,6 +58,7 @@ parser.add_argument('--test_list',      type=str,   default="data/val_pairs.csv"
 ## Model definition
 parser.add_argument('--model',          type=str,   default="ResNet18", help='Name of model definition');
 parser.add_argument('--nOut',           type=int,   default=512,    help='Embedding size in the last FC layer');
+parser.add_argument('--se_reduction',   type=int,   default=16,     help='SE reduction ratio (only used by SE models)');
 
 ## For test only
 parser.add_argument('--eval',           dest='eval', action='store_true',   help='Eval only')
