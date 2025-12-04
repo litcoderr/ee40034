@@ -1,0 +1,103 @@
+% EE40034 Report Outline
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[margin=0.75in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{Student No.: 20253774}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\title{EE40034 Report}
+\author{20253774 Youngchae Chee}
+\date{}
+
+\setlist[itemize]{leftmargin=*}
+\titlespacing*{\section}{0pt}{8pt plus 2pt minus 2pt}{4pt}
+\titlespacing*{\subsection}{0pt}{6pt plus 2pt minus 2pt}{2pt}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+\begin{itemize}
+    \item Problem definition and motivation for face embedding and verification.
+    \item High-level overview of baseline, masked, and SE variants.
+    \item Summary of main contributions and expected outcomes.
+\end{itemize}
+
+\section{Related Work}
+\begin{itemize}
+    \item Classical face recognition and metric learning approaches.
+    \item Residual networks, masking strategies, and attention (SE) mechanisms.
+    \item Positioning of this work relative to prior art.
+\end{itemize}
+
+\section{Dataset and Preprocessing}
+\begin{itemize}
+    \item Dataset splits (train1, val, test) and class statistics.
+    \item Image preprocessing, normalization, and data augmentation strategy.
+    \item Pair-list format for verification evaluation.
+\end{itemize}
+
+\section{Models}
+\subsection{Baseline ResNet18}
+\begin{itemize}
+    \item Architecture summary and embedding dimensionality.
+    \item Initialization from pretrained weights (if any).
+\end{itemize}
+
+\subsection{Masked ResNet18}
+\begin{itemize}
+    \item Per-block spatial mask generation and gating.
+    \item Rationale for focusing attention on facial regions.
+\end{itemize}
+
+\subsection{SE-ResNet18}
+\begin{itemize}
+    \item Squeeze-and-Excitation channel attention design and reduction ratio.
+    \item Parameter efficiency considerations.
+\end{itemize}
+
+\section{Training Strategy}
+\begin{itemize}
+    \item Softmax pre-training setup (optimizer, scheduler, hyperparameters).
+    \item Hybrid fine-tuning with triplet loss (nPerClass, mining approach).
+    \item Checkpointing, initialization choices, and hyperparameter tuning.
+\end{itemize}
+
+\section{Evaluation}
+\begin{itemize}
+    \item Verification protocol using cosine similarity on embedding pairs.
+    \item Metrics: Equal Error Rate (EER) and any additional metrics.
+    \item Ablation plan: baseline vs. mask vs. SE vs. hybrid losses.
+\end{itemize}
+
+\section{Results}
+\begin{itemize}
+    \item Quantitative results table across validation/test splits.
+    \item Impact of masking, SE, and metric fine-tuning on performance.
+    \item Analysis of parameter counts and computational cost.
+\end{itemize}
+
+\section{Discussion}
+\begin{itemize}
+    \item Strengths, weaknesses, and observed failure cases.
+    \item Effect of attention mechanisms on robustness and generalization.
+    \item Practical considerations for deployment.
+\end{itemize}
+
+\section{Conclusion and Future Work}
+\begin{itemize}
+    \item Key takeaways and summary of improvements.
+    \item Potential extensions: better mining, margin-based softmax, larger backbones.
+    \item Next steps for dataset curation or additional regularization.
+\end{itemize}
+
+\end{document}

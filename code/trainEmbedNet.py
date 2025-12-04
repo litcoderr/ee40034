@@ -40,7 +40,7 @@ parser.add_argument("--lr_decay",       type=float, default=0.90,   help='Learni
 parser.add_argument('--weight_decay',   type=float, default=0,      help='Weight decay in the optimizer');
 
 ## Loss functions
-parser.add_argument('--margin',         type=float, default=0.1,    help='Loss margin, only for some loss functions');
+parser.add_argument('--margin',         type=float, default=0.2,    help='Loss margin, only for some loss functions');
 parser.add_argument('--scale',          type=float, default=30,     help='Loss scale, only for some loss functions');
 parser.add_argument('--nPerClass',      type=int,   default=1,      help='Number of images per class per batch, only for metric learning based losses');
 parser.add_argument('--nClasses',       type=int,   default=9500,   help='Number of classes in the softmax layer, only for softmax-based losses');
