@@ -10,6 +10,7 @@ import glob
 import datetime
 import numpy
 import logging
+import wandb
 from EmbedNet import *
 from DatasetLoader import get_data_loader
 from sklearn import metrics
@@ -65,6 +66,11 @@ parser.add_argument('--output',         type=str,   default="",     help='Save a
 ## Training
 parser.add_argument('--gpu',            type=int,   default=9,      help='GPU index');
 
+## WandB logging
+parser.add_argument('--wandb_entity',   type=str,   default="litcoderr", help='WandB entity/user name');
+parser.add_argument('--wandb_project',  type=str,   default="ee40034", help='WandB project name');
+parser.add_argument('--wandb_run_name', type=str,   default="baseline", help='WandB run name');
+
 args = parser.parse_args();
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
@@ -74,13 +80,14 @@ args = parser.parse_args();
 def compute_eer(all_labels,all_scores):
 
     # compute receiver operating characteristic (ROC) for binary classification
-    # (write your code here)
+    fpr, tpr, _ = metrics.roc_curve(all_labels, all_scores, pos_label=1)
 
     # calculate false negative rate (FNR)
-    # (write your code here)
+    fnr = 1 - tpr
 
     # calculate equal error rate (EER). The EER is the error rate at which FNR is equal to FPR.
-    # (write your code here)
+    idxE = numpy.nanargmin(numpy.absolute(fnr - fpr))
+    EER = (fnr[idxE] + fpr[idxE]) / 2
 
     return EER
 
@@ -88,7 +95,7 @@ def compute_eer(all_labels,all_scores):
 ## Trainer script
 ## ===== ===== ===== ===== ===== ===== ===== =====
 
-def main_worker(args):
+def main_worker(args, wandb_run=None):
 
     logger = logging.getLogger(__name__)
 
@@ -126,7 +133,7 @@ def main_worker(args):
     trainer     = ModelTrainer(model, **vars(args))
 
     ## Load model weights
-    modelfiles = glob.glob(f'{args.save_path}/epoch0*.model')
+    modelfiles = glob.glob(f"{args.save_path}/epoch0*.model")
     modelfiles.sort()
 
     ## If the target directory already exists, start from the existing file
@@ -155,12 +162,15 @@ def main_worker(args):
 
         print(f'EER {EER*100:.2f}%')
 
+        if wandb_run is not None:
+            wandb_run.log({"eval/eer": EER})
+
         if args.output != '':
             with open(args.output,'w') as f:
                 for ii in range(len(sc)):
                     f.write(f'{sc[ii]:.4f},{lab[ii]:d},{trials[ii]}\n')
 
-        quit();
+        return;
 
     ## Log arguments
     logger.info(f'{args}')
@@ -171,8 +181,12 @@ def main_worker(args):
         clr = [x['lr'] for x in trainer.__optimizer__.param_groups]
 
         logger.info(f"Epoch {ep:04d} started with LR {max(clr):.5f} ");
-        loss = trainer.train_network(trainLoader);
+        loss = trainer.train_network(trainLoader, wandb_run=wandb_run, epoch=ep);
+        clr = [x['lr'] for x in trainer.__optimizer__.param_groups]
         logger.info(f"Epoch {ep:04d} completed with TLOSS {loss:.5f}");
+
+        if wandb_run is not None:
+            wandb_run.log({"train/epoch_loss": loss, "lr": max(clr), "epoch": ep}, step=trainer.global_step)
 
         if ep % args.test_interval == 0:
             
@@ -180,6 +194,10 @@ def main_worker(args):
             EER = compute_eer(lab, sc)
 
             logger.info(f"Epoch {ep:04d}, Val EER {EER*100:.2f}%");
+
+            if wandb_run is not None:
+                wandb_run.log({"val/eer": EER, "epoch": ep}, step=trainer.global_step)
+
             trainer.saveParameters(args.save_path+f"/epoch{ep:04d}.model");
 
 # ## ===== ===== ===== ===== ===== ===== ===== =====
@@ -194,7 +212,21 @@ def main():
     if not(os.path.exists(args.save_path)):
         os.makedirs(args.save_path)
 
-    main_worker(args)
+    wandb_run = None
+    try:
+        wandb_run = wandb.init(
+            entity=args.wandb_entity,
+            project=args.wandb_project,
+            name=args.wandb_run_name,
+            config=vars(args),
+        )
+    except Exception as e:
+        print(f"W&B init failed: {e}. Continuing without W&B logging.")
+
+    main_worker(args, wandb_run)
+
+    if wandb_run is not None:
+        wandb_run.finish()
 
 
 if __name__ == '__main__':

@@ -55,19 +55,20 @@ class ModelTrainer(object):
         self.__scheduler__, self.lr_step = Scheduler(self.__optimizer__, **kwargs)
 
         assert self.lr_step in ['epoch', 'iteration']
+        self.global_step = 0
 
     # ## ===== ===== ===== ===== ===== ===== ===== =====
     # ## Train network
     # ## ===== ===== ===== ===== ===== ===== ===== =====
 
-    def train_network(self, loader):
+    def train_network(self, loader, wandb_run=None, epoch=None):
 
-        self.__model__.train();
+        self.__model__.train()
 
-        stepsize = loader.batch_size;
+        stepsize = loader.batch_size
 
-        counter = 0;
-        loss    = 0;
+        counter = 0
+        loss    = 0
 
         with tqdm(loader, unit="batch") as tepoch:
         
@@ -78,27 +79,36 @@ class ModelTrainer(object):
                 data    = data.transpose(1,0)
 
                 ## Reset gradients
-                # (write your code here)
+                self.__optimizer__.zero_grad()
 
                 ## Forward pass and compute loss
                 nloss = self.__model__(data.cuda(), label.cuda())
                 ## Backward pass
-                # (write your code here)
+                nloss.backward()
                 ## Optimizer step
-                # (write your code here)
+                self.__optimizer__.step()
 
                 ## Keep cumulative statistics
-                loss    += # (write your code here)
+                loss    += nloss.item()
                 counter += 1;
 
                 # Print statistics to progress bar
                 tepoch.set_postfix(loss=loss/counter)
 
+                self.global_step += 1
+
+                if wandb_run is not None:
+                    current_lr = max(x['lr'] for x in self.__optimizer__.param_groups)
+                    metrics = {"train/loss": nloss.item(), "lr": current_lr}
+                    if epoch is not None:
+                        metrics["epoch"] = epoch
+                    wandb_run.log(metrics, step=self.global_step)
+
                 if self.lr_step == 'iteration': self.__scheduler__.step()
 
             if self.lr_step == 'epoch': self.__scheduler__.step()
         
-        return (loss/counter);
+        return (loss/counter)
 
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
@@ -153,7 +163,11 @@ class ModelTrainer(object):
             com_feat = feats[data[2]]
 
             ## Find cosine similarity score
-            score = # (write your code here)
+            if getattr(self.__model__.__C__, 'test_normalize', False):
+                ref_feat = F.normalize(ref_feat, p=2, dim=1)
+                com_feat = F.normalize(com_feat, p=2, dim=1)
+
+            score = torch.mean(F.cosine_similarity(ref_feat, com_feat))
 
             all_scores.append(score.item());  
             all_labels.append(int(data[0]));
@@ -191,4 +205,3 @@ class ModelTrainer(object):
                 continue;
 
             self_state[name].copy_(param);
-
