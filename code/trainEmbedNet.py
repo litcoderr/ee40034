@@ -58,6 +58,9 @@ parser.add_argument('--train_ext',      type=str,   default="jpg",  help='Traini
 parser.add_argument('--test_path',      type=str,   default="data/val",     help='Absolute path to the test set');
 parser.add_argument('--test_list',      type=str,   default="data/val_pairs.csv",   help='Evaluation list');
 parser.add_argument('--no_aug',         action='store_true', help='Disable train-time augmentation');
+parser.add_argument('--attn_map',       action='store_true', help='Save attention maps during evaluation');
+parser.add_argument('--attn_map_save_path', type=str, default="", help='Base path to save attention maps');
+parser.add_argument('--n_attn_map',     type=int, default=10, help='Number of images to save attention maps for');
 
 ## Model definition
 parser.add_argument('--model',          type=str,   default="ResNet18", help='Name of model definition');

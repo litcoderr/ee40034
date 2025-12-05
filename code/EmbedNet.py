@@ -4,8 +4,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy, math, pdb, sys
+import numpy as np
+import math, pdb, sys
 import time, importlib
+from pathlib import Path
+from PIL import Image
 from DatasetLoader import test_dataset_loader
 from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
@@ -118,6 +121,18 @@ class ModelTrainer(object):
     def evaluateFromList(self, test_list, test_path, nDataLoaderThread, transform, print_interval=100, num_eval=10, **kwargs):
         
         self.__model__.eval();
+
+        attn_map_enabled     = kwargs.get('attn_map', False)
+        n_attn_map           = int(kwargs.get('n_attn_map', 0) or 0)
+        attn_map_save_root   = kwargs.get('attn_map_save_path', "")
+        attn_map_save_root   = Path(attn_map_save_root) if attn_map_save_root not in ["", None] else Path(kwargs.get('save_path', 'exps')) / 'attn_maps'
+        attn_buffers         = []
+        attn_handles         = []
+        attn_saved           = 0
+        save_all_attn        = n_attn_map <= 0
+
+        if attn_map_enabled:
+            attn_buffers, attn_handles = self._setup_attn_hooks()
         
         feats       = {}
 
@@ -144,9 +159,29 @@ class ModelTrainer(object):
 
         ## Extract features for every image
         for data in tqdm(test_loader):
-            inp1                = data[0][0].cuda()
-            ref_feat            = self.__model__(inp1).detach().cpu()
+            image_tensor        = data[0][0]
+            inp1                = image_tensor.cuda()
+
+            if attn_map_enabled:
+                attn_buffers.clear()
+
+            with torch.no_grad():
+                ref_feat        = self.__model__(inp1).detach().cpu()
+
             feats[data[1][0]]   = ref_feat
+
+            if attn_map_enabled and (save_all_attn or attn_saved < n_attn_map) and len(attn_buffers) > 0:
+                self._save_attention_maps(image_tensor, attn_buffers, attn_map_save_root, data[1][0])
+                attn_saved += 1
+
+            if attn_map_enabled and (not save_all_attn) and attn_saved >= n_attn_map and len(attn_handles) > 0:
+                for handle in attn_handles:
+                    handle.remove()
+                attn_handles = []
+                attn_map_enabled = False
+
+        for handle in attn_handles:
+            handle.remove()
 
         all_scores = [];
         all_labels = [];
@@ -174,6 +209,91 @@ class ModelTrainer(object):
             all_trials.append(data[1] + "," + data[2])
 
         return (all_scores, all_labels, all_trials)
+
+    def _setup_attn_hooks(self):
+        
+        attn_buffers = []
+        handles = []
+
+        def make_hook(idx):
+            def hook(module, input, output):
+                attn_buffers.append((idx, torch.sigmoid(output.detach().cpu())))
+            return hook
+
+        idx = 0
+        for _, module in self.__model__.__E__.named_modules():
+            mask_conv = getattr(module, 'mask_conv', None)
+            if mask_conv is not None:
+                handles.append(mask_conv.register_forward_hook(make_hook(idx)))
+                idx += 1
+
+        if idx == 0:
+            print('No attention-bearing modules found; skipping attention map saving.')
+
+        return attn_buffers, handles
+
+    def _save_attention_maps(self, image_tensor, attn_buffers, save_root, image_relpath):
+
+        if len(attn_buffers) == 0:
+            return
+
+        save_root = Path(save_root)
+        rel_path = Path(image_relpath).with_suffix("")
+        base_dir = save_root / rel_path
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        image = image_tensor.detach().cpu()
+        image = image * std + mean
+        image = image.clamp(0, 1)
+        image_np = image.permute(1, 2, 0).numpy()
+
+        for idx, mask in sorted(attn_buffers, key=lambda x: x[0]):
+
+            if mask.dim() == 4:
+                mask = mask[0, 0, :, :]
+            elif mask.dim() == 3:
+                mask = mask[0, :, :]
+
+            mask_resized = F.interpolate(
+                mask.unsqueeze(0).unsqueeze(0),
+                size=image.shape[1:],
+                mode='bilinear',
+                align_corners=False,
+            ).squeeze().clamp(0, 1)
+
+            mask_np = mask_resized.numpy()
+            heatmap_rgb = self._apply_colormap(mask_np)
+            alpha = 0.55
+            overlay = (1.0 - alpha) * image_np + alpha * heatmap_rgb
+            overlay = np.clip(overlay, 0.0, 1.0)
+
+            outfile = base_dir / f"{idx:02d}.png"
+            Image.fromarray((overlay * 255).astype(np.uint8)).save(outfile)
+
+    def _apply_colormap(self, mask_np):
+
+        mask_flat = mask_np.astype(np.float32).reshape(-1)
+        # Color stops inspired by inferno/magma but with a brighter mid/high end
+        stops = np.array([0.0, 0.2, 0.45, 0.7, 1.0], dtype=np.float32)
+        colors = np.array(
+            [
+                [0.05, 0.05, 0.10],
+                [0.23, 0.08, 0.32],
+                [0.60, 0.20, 0.48],
+                [0.93, 0.56, 0.35],
+                [1.00, 0.88, 0.70],
+            ],
+            dtype=np.float32,
+        )
+
+        r = np.interp(mask_flat, stops, colors[:, 0])
+        g = np.interp(mask_flat, stops, colors[:, 1])
+        b = np.interp(mask_flat, stops, colors[:, 2])
+        colored = np.stack([r, g, b], axis=1).reshape(mask_np.shape + (3,))
+        return colored
+
 
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
