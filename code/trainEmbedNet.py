@@ -57,6 +57,7 @@ parser.add_argument('--train_path',     type=str,   default="data/train",   help
 parser.add_argument('--train_ext',      type=str,   default="jpg",  help='Training files extension');
 parser.add_argument('--test_path',      type=str,   default="data/val",     help='Absolute path to the test set');
 parser.add_argument('--test_list',      type=str,   default="data/val_pairs.csv",   help='Evaluation list');
+parser.add_argument('--no_aug',         action='store_true', help='Disable train-time augmentation');
 
 ## Model definition
 parser.add_argument('--model',          type=str,   default="ResNet18", help='Name of model definition');
@@ -119,22 +120,25 @@ def main_worker(args, wandb_run=None):
     ep          = 1
 
     ## Input transformations for training (you can change if you like)
-    train_transform = transforms.Compose(
-        [
-            transforms.RandomResizedCrop(224, scale=(0.8, 1.0), ratio=(0.9, 1.1)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
-            transforms.RandomGrayscale(p=0.1),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-
-    ## Input transformations for evaluation (you can change if you like)
     test_transform = transforms.Compose(
         [transforms.ToTensor(),
          transforms.Resize(256),
          transforms.CenterCrop([224,224]),
          transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+
+    if args.no_aug:
+        train_transform = test_transform
+    else:
+        train_transform = transforms.Compose(
+            [
+                transforms.RandomResizedCrop(224, scale=(0.8, 1.0), ratio=(0.9, 1.1)),
+                transforms.RandomHorizontalFlip(),
+                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
+                transforms.RandomGrayscale(p=0.1),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
+
 
     ## Initialise trainer and data loader
     trainLoader = get_data_loader(transform=train_transform, **vars(args));
