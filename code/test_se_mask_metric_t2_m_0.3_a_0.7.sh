@@ -10,8 +10,8 @@ RUN_NAME="${RUN_NAME:-se_mask_triplet_arcface_t2_m_0.3_a_0.7}"
 # Data paths (override to point at your copies)
 ROOT_PATH="/mnt/hard2/litcoderr/project/ee40034"
 TRAIN_PATH="${TRAIN_PATH:-${ROOT_PATH}/data/train2}"
-TEST_PATH="${TEST_PATH:-${ROOT_PATH}/data/val}"
-TEST_LIST="${TEST_LIST:-${ROOT_PATH}/data/val_pairs.csv}"
+TEST_PATH="${TEST_PATH:-${ROOT_PATH}/data/test}"
+TEST_LIST="${TEST_LIST:-${ROOT_PATH}/data/test_pairs.csv}"
 
 # Training hyperparameters for metric fine-tuning
 MODEL="${MODEL:-resnet_se_mask}"
@@ -22,7 +22,7 @@ N_PER_CLASS="${N_PER_CLASS:-2}"
 MAX_EPOCH="${MAX_EPOCH:-100}"
 N_OUT="${N_OUT:-256}"
 SAVE_ROOT="${SAVE_ROOT:-${SCRIPT_DIR}/exps/se_mask_triplet_arcface_t2_m_0.3_a_0.7/eval}"
-INITIAL_MODEL="${INITIAL_MODEL:-/mnt/hard2/litcoderr/project/ee40034/code/exps/se_mask_triplet_arcface_t2_m_0.3_a_0.7/epoch0018.model}"
+INITIAL_MODEL="${INITIAL_MODEL:-/mnt/hard2/litcoderr/project/ee40034/code/exps/se_mask_triplet_arcface_t2_m_0.3_a_0.7/epoch0022.model}"
 
 WANDB_MODE="${WANDB_MODE:-disabled}" \
 python "${SCRIPT_DIR}/trainEmbedNet.py" \

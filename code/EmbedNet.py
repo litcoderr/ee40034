@@ -123,6 +123,8 @@ class ModelTrainer(object):
         self.__model__.eval();
 
         attn_map_enabled     = kwargs.get('attn_map', False)
+        tta                  = int(kwargs.get('TTA', 1) or 1)
+        use_tta              = tta > 1
         n_attn_map           = int(kwargs.get('n_attn_map', 0) or 0)
         attn_map_save_root   = kwargs.get('attn_map_save_path', "")
         attn_map_save_root   = Path(attn_map_save_root) if attn_map_save_root not in ["", None] else Path(kwargs.get('save_path', 'exps')) / 'attn_maps'
@@ -131,7 +133,9 @@ class ModelTrainer(object):
         attn_saved           = 0
         save_all_attn        = n_attn_map <= 0
 
-        if attn_map_enabled:
+        need_attn_maps = attn_map_enabled or use_tta
+
+        if need_attn_maps:
             attn_buffers, attn_handles = self._setup_attn_hooks()
         
         feats       = {}
@@ -162,23 +166,33 @@ class ModelTrainer(object):
             image_tensor        = data[0][0]
             inp1                = image_tensor.cuda()
 
-            if attn_map_enabled:
+            if need_attn_maps:
                 attn_buffers.clear()
 
             with torch.no_grad():
                 ref_feat        = self.__model__(inp1).detach().cpu()
 
+            attn_for_base = list(attn_buffers) if need_attn_maps else []
+            prob_map = None
+            if use_tta:
+                prob_map = self._build_probability_map(attn_for_base, image_tensor)
+                ref_feat = self._apply_tta(image_tensor, ref_feat, prob_map, tta, attn_buffers if need_attn_maps else None)
+
             feats[data[1][0]]   = ref_feat
 
-            if attn_map_enabled and (save_all_attn or attn_saved < n_attn_map) and len(attn_buffers) > 0:
-                self._save_attention_maps(image_tensor, attn_buffers, attn_map_save_root, data[1][0])
+            if attn_map_enabled and (save_all_attn or attn_saved < n_attn_map) and len(attn_for_base) > 0:
+                self._save_attention_maps(image_tensor, attn_for_base, attn_map_save_root, data[1][0])
                 attn_saved += 1
 
             if attn_map_enabled and (not save_all_attn) and attn_saved >= n_attn_map and len(attn_handles) > 0:
-                for handle in attn_handles:
-                    handle.remove()
-                attn_handles = []
+                if not use_tta:
+                    for handle in attn_handles:
+                        handle.remove()
+                    attn_handles = []
                 attn_map_enabled = False
+
+            if need_attn_maps:
+                attn_buffers.clear()
 
         for handle in attn_handles:
             handle.remove()
@@ -294,6 +308,86 @@ class ModelTrainer(object):
         colored = np.stack([r, g, b], axis=1).reshape(mask_np.shape + (3,))
         return colored
 
+    def _build_probability_map(self, attn_buffers, image_tensor):
+
+        if len(attn_buffers) == 0:
+            h, w = image_tensor.shape[1:]
+            return torch.ones((h, w)) / float(h * w)
+
+        h, w = image_tensor.shape[1:]
+        accum = None
+        for _, mask in attn_buffers:
+            if mask.dim() == 4:
+                mask = mask[0, 0, :, :]
+            elif mask.dim() == 3:
+                mask = mask[0, :, :]
+            mask_resized = F.interpolate(
+                mask.unsqueeze(0).unsqueeze(0),
+                size=(h, w),
+                mode='bilinear',
+                align_corners=False,
+            ).squeeze()
+            accum = mask_resized if accum is None else accum + mask_resized
+
+        if accum is None:
+            accum = torch.ones((h, w))
+
+        accum = accum.clamp(min=0)
+        total = accum.sum()
+        if total <= 0:
+            accum = torch.ones_like(accum) / float(h * w)
+        else:
+            accum = accum / total
+
+        return accum
+
+    def _apply_tta(self, image_tensor, base_feat, prob_map, tta, attn_buffers=None):
+
+        h, w = image_tensor.shape[1:]
+        min_side = min(h, w)
+        side = max(1, int(round(0.8 * min_side)))
+        side = min(side, min_side)
+        grid_size = max(1, tta)
+        probs = prob_map if prob_map is not None else torch.ones((h, w)) / float(h * w)
+
+        feats = [base_feat.squeeze(0)]
+        weights = [1.0]
+
+        if grid_size > 1:
+            centers_y = np.linspace(side / 2, h - side / 2, grid_size)
+            centers_x = np.linspace(side / 2, w - side / 2, grid_size)
+
+            for cy in centers_y:
+                for cx in centers_x:
+                    top = int(round(cy - side / 2))
+                    left = int(round(cx - side / 2))
+                    top = max(0, min(top, h - side))
+                    left = max(0, min(left, w - side))
+
+                    crop = image_tensor[:, top:top + side, left:left + side]
+                    crop = F.interpolate(
+                        crop.unsqueeze(0),
+                        size=(h, w),
+                        mode='bilinear',
+                        align_corners=False,
+                    ).squeeze(0)
+
+                    if attn_buffers is not None:
+                        attn_buffers.clear()
+
+                    with torch.no_grad():
+                        tta_feat = self.__model__(crop.cuda()).detach().cpu().squeeze(0)
+
+                    region_weight = probs[top:top + side, left:left + side].sum().item()
+                    weights.append(region_weight)
+                    feats.append(tta_feat)
+
+        feat_stack = torch.stack(feats, dim=0)
+        weight_tensor = torch.tensor(weights, dtype=feat_stack.dtype).unsqueeze(1)
+        weight_sum = weight_tensor.sum() + 1e-8
+        weighted_feat = (feat_stack * weight_tensor).sum(dim=0, keepdim=True) / weight_sum
+
+        return weighted_feat
 
 
     ## ===== ===== ===== ===== ===== ===== ===== =====

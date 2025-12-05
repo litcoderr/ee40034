@@ -61,6 +61,7 @@ parser.add_argument('--no_aug',         action='store_true', help='Disable train
 parser.add_argument('--attn_map',       action='store_true', help='Save attention maps during evaluation');
 parser.add_argument('--attn_map_save_path', type=str, default="", help='Base path to save attention maps');
 parser.add_argument('--n_attn_map',     type=int, default=10, help='Number of images to save attention maps for');
+parser.add_argument('--TTA',            type=int, default=1, help='Grid size for fixed square TTA crops (1 = no TTA, 3 = 3x3 grid)');
 
 ## Model definition
 parser.add_argument('--model',          type=str,   default="ResNet18", help='Name of model definition');
